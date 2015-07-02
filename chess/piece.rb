@@ -1,11 +1,17 @@
+require_relative 'board'
+
 class Piece
-  attr_reader :icon
+  attr_accessor :icon, :color, :current_position
 
   def initialize(start_position = nil, color = :black, reference_board)
     @icon = "Ҏ"
     @current_position = start_position
     @color = color
     @reference_board = reference_board
+  end
+
+  def is_king?
+    false
   end
 
   def moves
@@ -64,6 +70,23 @@ class Piece
     false
   end
 
+  def valid_moves
+    # iterate through grid
+    # for each piece, deep dup board
+    positions_to_remove = []
+    board_dup =  @reference_board.dupe
+    all_possible_moves = moves
+    all_possible_moves.each do |pos|
+      board_dup.move!(@current_position, pos)
+      # in check?
+      positions_to_remove << pos if board_dup.in_check?(@color)
+      board_dup =  @reference_board.dupe
+    end
+    all_possible_moves.reject! { |pos| positions_to_remove.include?(pos) }
+    # puts "#{@icon}: #{all_possible_moves} to get out of check"
+    all_possible_moves
+  end
+
 end
 
 ##############################################
@@ -82,12 +105,14 @@ class SteppingPiece < Piece
   end
 end
 
-##############################################
+##################### KING #########################
 
 class King < SteppingPiece
-  def initialize(start_position, color)
-    super(start_position, color)
+  attr_accessor :all_possible_moves
+  def initialize(start_position = nil, color = :black, reference_board)
+    super(start_position, color, reference_board)
     assign_icon
+    @all_possible_moves = moves
   end
 
   def assign_icon
@@ -98,11 +123,15 @@ class King < SteppingPiece
     end
   end
 
+  def is_king?
+    true
+  end
+
   def moves
     r, c = @current_position
     possible_moves = super.take(2).flatten(2)
     possible_moves.select! do |position_pairs|
-      position_pairs[0] <= r + 1 && position_pairs[1] <= r + 1
+      position_pairs[0] <= r + 1 && position_pairs[0] >= r - 1 && position_pairs[1] <= c + 1 && position_pairs[1] >= c - 1
     end
     possible_moves
   end
@@ -110,10 +139,17 @@ class King < SteppingPiece
 
 end
 
+##################### QUEEN #########################
+
+
 class Queen < SlidingPiece
-  def initialize(start_position, color)
-    super(start_position, color)
+  attr_accessor :all_possible_moves, :directional_moves_array
+
+  def initialize(start_position = nil, color = :black, reference_board)
+    super(start_position, color, reference_board)
     assign_icon
+    @directional_moves_array = [] # will be built in #moves
+    @all_possible_moves = moves
   end
 
   def assign_icon
@@ -126,8 +162,7 @@ class Queen < SlidingPiece
 
   def moves
     all_possible_moves = super.flatten(1)
-    direction_arr = directional_array(all_possible_moves)
-    # all_possible_moves = valid_moves(direction_arr)
+    @directional_moves_array = directional_array(all_possible_moves)
     #check if something is blocking the path
     all_possible_moves.flatten(1)
   end
@@ -139,10 +174,16 @@ class Queen < SlidingPiece
 
 end
 
+##################### BISHOP #########################
+
 class Bishop < SlidingPiece
-  def initialize(start_position, color)
-    super(start_position, color)
+  attr_accessor :all_possible_moves, :directional_moves_array
+
+  def initialize(start_position = nil, color = :black, reference_board)
+    super(start_position, color, reference_board)
     assign_icon
+    @directional_moves_array = [] # will be built in #moves
+    @all_possible_moves = moves
   end
 
   def assign_icon
@@ -154,17 +195,26 @@ class Bishop < SlidingPiece
   end
 
   def moves
-    possible_moves = super.take(1)
-    possible_moves
+    all_possible_moves = super[0]
+    @directional_moves_array = directional_array(all_possible_moves)
+    all_possible_moves.flatten(1)
   end
 
+  def directional_array(moves_arr)
+    direction_arr = moves_arr.select { |sub_arr| !sub_arr.empty? }
+    direction_arr # returns [[r_up], [r_down]... ]
+  end
 
 end
 
+##################### KNIGHT #########################
+
 class Knight < SteppingPiece
-  def initialize(start_position, color)
-    super(start_position, color)
+  attr_accessor :all_possible_moves
+  def initialize(start_position = nil, color = :black, reference_board)
+    super(start_position, color, reference_board)
     assign_icon
+    @all_possible_moves = moves
   end
 
   def assign_icon
@@ -176,17 +226,21 @@ class Knight < SteppingPiece
   end
 
   def moves
-    possible_moves = super.last
-    possible_moves
+    all_possible_moves = super.last
   end
 
 
 end
 
+##################### ROOK #########################
+
 class Rook < SlidingPiece
-  def initialize(start_position, color)
-    super(start_position, color)
+  attr_accessor :all_possible_moves, :directional_moves_array
+  def initialize(start_position = nil, color = :black, reference_board)
+    super(start_position, color, reference_board)
     assign_icon
+    @directional_moves_array = [] # will be built in #moves
+    @all_possible_moves = moves
   end
 
   def assign_icon
@@ -198,18 +252,34 @@ class Rook < SlidingPiece
   end
 
   def moves
-    possible_moves = super[1]
-    possible_moves
+    all_possible_moves = super[1]
+    @directional_moves_array = directional_array(all_possible_moves)
+    all_possible_moves.flatten(1)
   end
 
+  def directional_array(moves_arr)
+    direction_arr = moves_arr.select { |sub_arr| !sub_arr.empty? }
+    direction_arr # returns [[r_up], [r_down]... ]
+  end
 
 end
 
+##################### PAWN #########################
+
 class Pawn < Piece
-  def initialize(start_position, color)
-    super(start_position, color)
+  attr_accessor :all_possible_moves
+  attr_accessor :start_position, :current_position # for testing pawn's path
+
+  def initialize(start_position = nil, color = :black, reference_board)
+    super(start_position, color, reference_board)
     assign_icon
+    @start_position = start_position
+    @all_possible_moves = moves
   end
+  #
+  # def make_move(end_pos)
+  #   @current_position = end_pos
+  # end
 
   def assign_icon
     if @color == :black
@@ -223,6 +293,29 @@ class Pawn < Piece
     #depends on color
     #depends on current position since it can move 2 spaces atfirst
     #only moves forward, will not return to start_position
+    if @color == :white
+      if @current_position == @start_position
+         all_possible_moves = super[1][0][0..1]
+         all_possible_moves << super[0][0][0] unless super[0][0][0].nil?
+         all_possible_moves << super[0][3][0] unless super[0][3][0].nil?
+      else
+         all_possible_moves = super[1][0].take(1)
+         all_possible_moves << super[0][0][0] unless super[0][0][0].nil?
+         all_possible_moves << super[0][3][0] unless super[0][3][0].nil?
+       end
+    elsif @color == :black
+      if @current_position == @start_position
+         all_possible_moves = super[1][2][0..1]
+         all_possible_moves << super[0][1][0] unless super[0][1][0].nil?
+         all_possible_moves << super[0][2][0] unless super[0][2][0].nil?
+      else
+         all_possible_moves = super[1][2].take(1)
+         all_possible_moves << super[0][1][0] unless super[0][1][0].nil?
+         all_possible_moves << super[0][2][0] unless super[0][2][0].nil?
+       end
+    end
+
+      all_possible_moves
   end
 
 end

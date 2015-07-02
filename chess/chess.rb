@@ -4,19 +4,41 @@ require_relative 'board'
 # $stdin.getch
 class Chess
 
-  def initialize(player1, player2)
+  def initialize
     @board = Board.new
-    @players = [player1, player2]
+    @players = [Player.new(:white), Player.new(:black)]
+    @force_quit = false
   end
 
   def run
-    until game_over?
+    until game_over? || @force_quit
       render_board
-      select_piece
-      move_piece
+      arr = in_check
+      select_and_move(arr)
       switch_player
     end
     game_over_message
+  end
+
+  def in_check
+    if @board.in_check?(@players.first.color)
+      system("clear")
+      puts "King(#{@players.first.color}) is in check!"
+      puts "Please wait until board renders..."
+
+      array_of_piece_positions = []
+      @board.grid.each_with_index do |row, row_idx|
+        row.each_with_index do |square, square_idx|
+
+          if !square.empty? && square.color == @players.first.color
+            array_of_piece_positions << [row_idx, square_idx] unless square.valid_moves.empty?
+          end
+
+        end
+      end
+      render_board
+    end
+    array_of_piece_positions
   end
 
   def game_over?
@@ -27,11 +49,30 @@ class Chess
     @board.render
   end
 
-  def select_piece
-    pos_of_piece = cursor_movement
+  def select_and_move(arr) #important method - contains alot
+    start_pos = select_piece(arr)
+    # add later: render board, with spaces
+    # highlighted of where they could move
+    end_pos = move_piece_to
+    @board.move!(start_pos, end_pos)
   end
 
-  def move_piece
+  def select_piece(arr = nil)
+    while true
+      pos_of_piece = cursor_movement
+
+      if arr.nil?
+        break if !@board.current_piece(pos_of_piece).empty? && @board.current_piece(pos_of_piece).color == @players.first.color
+      else
+        break if !@board.current_piece(pos_of_piece).empty? && @board.current_piece(pos_of_piece).color == @players.first.color && arr.include?(pos_of_piece)
+      end
+
+      puts "Please choose one of your pieces."
+    end
+    pos_of_piece
+  end
+
+  def move_piece_to
     pos_of_move = cursor_movement
   end
 
@@ -40,7 +81,7 @@ class Chess
   end
 
   def game_over_message
-    puts "Gmae is over!"
+    puts "Game is over!"
   end
 
   def get_cursor_input
@@ -54,6 +95,7 @@ class Chess
       increment = key_press_coordinate(key_press)
       @board.move_cursor(increment)
       @board.render
+      @force_quit = true if key_press == "\u0003"
       break if key_press == "\u0003"
       # return the cursor position if \r
       return @board.cursor_pos if key_press == "\r"
@@ -74,6 +116,7 @@ class Chess
       return CURSOR_MOVEMENT[4]
     end
   end
+
 
 CURSOR_MOVEMENT = [[-1,0], [0,1], [1, 0], [0,-1], [0,0]]
 end
